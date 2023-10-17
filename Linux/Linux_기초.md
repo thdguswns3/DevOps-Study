@@ -26,7 +26,7 @@
 8. 네이버(www.naver.com)의 IP 주소를 확인하는 명령어는 무엇인가요?
     - 실행 결과(IP 주소)를 받는 과정을 설명해주세요(DNS 질의 과정)
     - /etc/hosts와 /etc/resolv.conf의 차이점을 설명해주세요.
-9. curl과 telnet의 차이점을 설명해주세요.
+9. curl, telnet, ping의 차이점을 설명해주세요.
 10. yum 패키지를 통해 httpd를 설치하고, 80 포트를 개방하여 서비스를 실행해주세요.
     - yum과 apt의 차이점은 무엇인가요?
     - httpd 포트 상태(LISTEN…)를 확인하는 명령어를 입력하고 결과를 작성해주세요.
