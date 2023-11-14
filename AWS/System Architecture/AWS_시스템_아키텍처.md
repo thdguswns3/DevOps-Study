@@ -8,4 +8,5 @@
 ## System Architecture
 1. Single Point of Failure란 무엇인가요?
     - 스택을 배포하여 서버에 Python locsut 모듈로 부하 테스트 코드를 작성 및 수행하고 이중화를 구성하여 부하에 따른 단일 장애점을 해결해보세요.
-2. ECS를 구축하고 CodeSeries로 CI/CD 파이프라인을 구축해주세요.
+2. AWS Elasticache Redis를 활용하여 이중화된 서버의 세션이 공유되도록 설정해주세요.
+3. ECS를 구축하고 CodeSeries로 CI/CD 파이프라인을 구축해주세요.
