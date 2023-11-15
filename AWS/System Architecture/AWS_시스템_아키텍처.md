@@ -7,8 +7,9 @@
 4. ECS와 EKS의 차이점은 무엇인가요?
 ## System Architecture
 1. Single Point of Failure란 무엇인가요?
-    - 스택을 배포하고 서버에 Python locsut 모듈로 부하 테스트 코드를 작성 및 실행하고 부하에 따른 단일 장애점을 해결해보세요.
-2. 스택을 배포하고 하기 내용을 참고하여 이중화로 동작하는 두 서버의 세션이 공유되도록 설정해주세요.
+    - [스택](https://github.com/eljoelee/DevOps-Study/blob/main/AWS/System%20Architecture/Sys_Arch_01.yaml)을 배포하고 서버에 Python locsut 모듈로 부하 테스트 [코드](https://github.com/eljoelee/DevOps-Study/blob/main/AWS/System%20Architecture/locustfile.py)를 실행하고 부하에 따른 단일 장애점을 해결해보세요.
+2. Session Clustering이란 무엇인가요?
+    - [스택](https://github.com/eljoelee/DevOps-Study/blob/main/AWS/System%20Architecture/Sys_Arch_02.yaml)을 배포하고 하기 내용을 참고하여 이중화로 동작하는 두 서버(Tomcat)의 세션이 공유되도록 설정해주세요.
     - 스택 배포 후 Elasticache 클러스터 생성
         > 하기 옵션을 제외한 나머지는 기본 값 그대로 진행
     - 새 클러스터 구성 및 생성
