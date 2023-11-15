@@ -1,0 +1,283 @@
+Parameters:
+  LatestAmiId:
+    Description: (DO NOT CHANGE)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    AllowedValues:
+      - /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MySSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ ec2.amazonaws.com ]
+            Action: 
+              - sts:AssumeRole
+      Path: /
+
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [ !Ref MySSMRole ]
+
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+     EnableDnsHostnames: true
+     EnableDnsSupport: true
+     CidrBlock: 10.0.0.0/16
+     Tags:
+        - Key: Name
+          Value: My-VPC
+
+  MyIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: My-IGW
+
+  MyIGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref MyIGW
+      VpcId: !Ref MyVPC
+
+  MyPublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: My-Public-RT
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: MyIGWAttachment
+    Properties:
+      RouteTableId: !Ref MyPublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MyIGW
+
+  MyPublicSN:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: My-Public-SN
+
+  MyPublicSN2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: My-Public-SN-2
+
+  MyPublicSNRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyPublicRT
+      SubnetId: !Ref MyPublicSN
+
+  MyPublicSNRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyPublicRT
+      SubnetId: !Ref MyPublicSN2
+
+  ALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: ALB-SG
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+
+  WebSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: WEB Security Group
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: Web-SG
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 8080
+        ToPort: 8080
+        SourceSecurityGroupId: !Ref ALBSG
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: !GetAtt MyVPC.CidrBlock
+
+  CacheSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cache Security Group
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: Cache-SG
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 6379
+        ToPort: 6379
+        CidrIp: !GetAtt MyVPC.CidrBlock
+
+  MySSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcId: !Ref MyVPC
+      SubnetIds: 
+        - !Ref MyPublicSN
+        - !Ref MyPublicSN2
+      SecurityGroupIds:
+        - !Ref WebSG
+
+  MySSMMSGEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref MyVPC
+      SubnetIds: 
+        - !Ref MyPublicSN
+        - !Ref MyPublicSN2
+      SecurityGroupIds:
+        - !Ref WebSG
+
+  MyEC2MSGEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcId: !Ref MyVPC
+      SubnetIds: 
+        - !Ref MyPublicSN
+        - !Ref MyPublicSN2
+      SecurityGroupIds:
+        - !Ref WebSG
+
+  HttpServerOne:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref MyInstanceProfile
+      Tags:
+        - Key: Name
+          Value: HTTP-Server-One
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref MyPublicSN
+          GroupSet:
+          - !Ref WebSG
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.0.10
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install -y java-11-amazon-corretto.x86_64 java-11-amazon-corretto-devel.x86_64
+            wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.82/bin/apache-tomcat-9.0.82.tar.gz
+            tar xvfz apache-tomcat-9.0.82.tar.gz
+            mv apache-tomcat-9.0.82 /usr/share/tomcat
+            ./usr/share/tomcat/bin/startup.sh
+            wget https://github.com/ran-jit/tomcat-cluster-redis-session-manager/releases/download/2.0.4/tomcat-cluster-redis-session-manager.zip
+            unzip tomcat-cluster-redis-session-manager.zip
+            cp tomcat-cluster-redis-session-manager/lib/* /usr/share/tomcat/lib/
+            cp tomcat-cluster-redis-session-manager/conf/* /usr/share/tomcat/conf/
+            wget https://raw.githubusercontent.com/eljoelee/DevOps-Study/main/AWS/System%20Architecture/session-check.jsp
+            mv session-check.jsp /usr/share/tomcat/webapps/ROOT/session_check.jsp
+
+  HttpServerTwo:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref MyInstanceProfile
+      Tags:
+        - Key: Name
+          Value: HTTP-Server-Two
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref MyPublicSN2
+          GroupSet:
+          - !Ref WebSG
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.1.10
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install -y java-11-amazon-corretto.x86_64 java-11-amazon-corretto-devel.x86_64
+            wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.82/bin/apache-tomcat-9.0.82.tar.gz
+            tar xvfz apache-tomcat-9.0.82.tar.gz
+            mv apache-tomcat-9.0.82 /usr/share/tomcat
+            ./usr/share/tomcat/bin/startup.sh
+            wget https://github.com/ran-jit/tomcat-cluster-redis-session-manager/releases/download/2.0.4/tomcat-cluster-redis-session-manager.zip
+            unzip tomcat-cluster-redis-session-manager.zip
+            cp tomcat-cluster-redis-session-manager/lib/* /usr/share/tomcat/lib/
+            cp tomcat-cluster-redis-session-manager/conf/* /usr/share/tomcat/conf/
+            wget https://raw.githubusercontent.com/eljoelee/DevOps-Study/main/AWS/System%20Architecture/session-check.jsp
+            mv session-check.jsp /usr/share/tomcat/webapps/ROOT/session_check.jsp
+
+  WebTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: WebTG
+      Port: 8080
+      Protocol: HTTP
+      HealthCheckPath: '/'
+      VpcId: !Ref MyVPC
+      Targets:
+        - Id: !Ref HttpServerOne
+          Port: 8080
+        - Id: !Ref HttpServerTwo
+          Port: 8080
+
+  MyALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: MyIGWAttachment
+    Properties:
+      Scheme: internet-facing
+      Name: My-ALB
+      SecurityGroups:
+        - !Ref ALBSG
+      Subnets:
+        - !Ref MyPublicSN
+        - !Ref MyPublicSN2
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebTG
+      LoadBalancerArn: !Ref MyALB
+      Port: 80
+      Protocol: HTTP
