@@ -1,6 +1,5 @@
 ### **주의사항** : 각 스택 배포 이후 반드시 해당 스택을 삭제 후 다음 실습을 진행해주세요.
 1. VPC란 무엇인가요?
-tess
 2. Private/Public Subnet 차이를 각각 설명해주세요.
 3. [스택](https://github.com/eljoelee/DevOps-Study/blob/main/AWS/Network_03.yaml)을 배포하고 프라이빗 서브넷 내 인스턴스에서 S3로 프라이빗 통신을 설정하고 ping 명령어를 수행한 결과를 작성해주세요.
 4. 다음과 같이 생성한 Subnet의 IP 대역마다 예약된 IP 주소의 역할을 각각 서술해주세요.
