@@ -1,0 +1,238 @@
+Parameters:
+  LatestAmiId:
+    Description: (DO NOT CHANGE)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    AllowedValues:
+      - /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: My-VPC
+
+  MyIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: My-IGW
+
+  MyIGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref MyIGW
+      VpcId: !Ref MyVPC
+
+  MyPublicRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: My-Public-RT
+
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: MyIGWAttachment
+    Properties:
+      RouteTableId: !Ref MyPublicRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MyIGW
+
+  MyPublicSN:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: My-Public-SN
+
+  MyPublicSN2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC
+      AvailabilityZone: !Select [ 2, !GetAZs '' ]
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: My-Public-SN-2
+
+  MyPublicSNRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyPublicRT
+      SubnetId: !Ref MyPublicSN
+
+  MyPublicSNRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyPublicRT
+      SubnetId: !Ref MyPublicSN2
+
+  LocustSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Locust Security Group
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: Locust-SG
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '8089'
+        ToPort: '8089'
+        CidrIp: 0.0.0.0/0
+
+  ALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: ALB-SG
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+
+  WebSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: WEB Security Group
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: Web-SG
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        SourceSecurityGroupId: !Ref ALBSG
+
+  LocustInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      Tags:
+        - Key: Name
+          Value: Locust-Server
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref MyPublicSN
+          GroupSet:
+          - !Ref LocustSG
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.0.5
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            pip3 uninstall urllib3
+            pip3 install urllib3==1.26.6 locust
+            wget https://raw.githubusercontent.com/eljoelee/DevOps-Study/main/AWS/System%20Architecture/locustfile.py 
+            locust
+  
+  HttpServerOne:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      Tags:
+        - Key: Name
+          Value: HTTP-Server-One
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref MyPublicSN
+          GroupSet:
+          - !Ref WebSG
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.0.10
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install -y httpd
+            systemctl start httpd
+            systemctl enable httpd.service
+            touch index.html
+            echo "<!DOCTYPE html><html><body><h1>Hello, I'm Server-one</h1></body></html>" > index.html
+            mv index.html /var/www/html/
+            systemctl restart httpd.service
+  
+  HttpServerTwo:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      Tags:
+        - Key: Name
+          Value: HTTP-Server-Two
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref MyPublicSN2
+          GroupSet:
+          - !Ref WebSG
+          AssociatePublicIpAddress: true
+          PrivateIpAddress: 10.0.1.10
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install -y httpd
+            systemctl start httpd
+            systemctl enable httpd.service
+            touch index.html
+            echo "<!DOCTYPE html><html><body><h1>Hello, I'm Server-two</h1></body></html>" > index.html
+            mv index.html /var/www/html/
+            systemctl restart httpd.service
+    
+  MyTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: TG-HTTP
+      Port: 80
+      Protocol: HTTP
+      HealthCheckPath: '/'
+      VpcId: !Ref MyVPC
+      Targets:
+        - Id: !Ref HttpServerOne
+          Port: 80
+        - Id: !Ref HttpServerTwo
+          Port: 80
+
+  MyALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: MyIGWAttachment
+    Properties:
+      Scheme: internet-facing
+      Name: My-ALB
+      SecurityGroups:
+        - !Ref ALBSG
+      Subnets:
+        - !Ref MyPublicSN
+        - !Ref MyPublicSN2
+
+  MyHTTPListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    DependsOn: MyALB
+    Properties:
+      DefaultActions:
+        - Type: "forward"
+          ForwardConfig:
+            TargetGroups:
+              - TargetGroupArn: !Ref MyTargetGroup
+      LoadBalancerArn: !Ref MyALB
+      Port: 80
+      Protocol: "HTTP"

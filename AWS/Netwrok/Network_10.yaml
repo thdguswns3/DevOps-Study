@@ -1,0 +1,238 @@
+Parameters:
+  LatestAmiId:
+    Description: (DO NOT CHANGE)
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    AllowedValues:
+      - /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+  MySSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ ec2.amazonaws.com ]
+            Action: 
+              - sts:AssumeRole
+      Path: /
+  
+  MyInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [ !Ref MySSMRole ]
+
+  MyVPC1:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: My-VPC-1
+
+  MyPrivateRT1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC1
+      Tags:
+        - Key: Name
+          Value: My-Private-RT-1
+
+  MyPrivateSN1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC1
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: My-Private-SN-1
+
+  MyPrivateSNRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyPrivateRT1
+      SubnetId: !Ref MyPrivateSN1
+
+  MyInstanceSG1:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSM Security Group
+      VpcId: !Ref MyVPC1
+      Tags:
+        - Key: Name
+          Value: My-Instance-SG-1
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: !GetAtt MyVPC1.CidrBlock
+      - IpProtocol: icmp
+        FromPort: -1
+        ToPort: -1
+        CidrIp: !GetAtt MyVPC2.CidrBlock
+
+  MySSMEndpoint1:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcId: !Ref MyVPC1
+      SubnetIds: 
+        - !Ref MyPrivateSN1
+      SecurityGroupIds:
+        - !Ref MyInstanceSG1
+
+  MySSMMSGEndpoint1:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref MyVPC1
+      SubnetIds: 
+        - !Ref MyPrivateSN1
+      SecurityGroupIds:
+        - !Ref MyInstanceSG1
+
+  MyEC2MSGEndpoint1:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcId: !Ref MyVPC1
+      SubnetIds: 
+        - !Ref MyPrivateSN1
+      SecurityGroupIds:
+        - !Ref MyInstanceSG1
+
+  MyInstance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref MyInstanceProfile
+      Tags:
+        - Key: Name
+          Value: My-Instance-1
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.0.0.10
+          DeviceIndex: 0
+          SubnetId: !Ref MyPrivateSN1
+          GroupSet:
+            - !Ref MyInstanceSG1
+  
+  MyVPC2:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.1.0.0/16
+      Tags:
+        - Key: Name
+          Value: My-VPC-2
+
+  MyPrivateRT2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MyVPC2
+      Tags:
+        - Key: Name
+          Value: My-Private-RT-2
+
+  MyPrivateSN2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MyVPC2
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.1.0.0/24
+      Tags:
+        - Key: Name
+          Value: My-Private-SN-2
+
+  MyPrivateSNRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref MyPrivateRT2
+      SubnetId: !Ref MyPrivateSN2
+
+  MyInstanceSG2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSM Security Group
+      VpcId: !Ref MyVPC2
+      Tags:
+        - Key: Name
+          Value: My-Instance-SG-2
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: !GetAtt MyVPC2.CidrBlock
+      - IpProtocol: icmp
+        FromPort: -1
+        ToPort: -1
+        CidrIp: !GetAtt MyVPC1.CidrBlock
+
+  MySSMEndpoint2:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcId: !Ref MyVPC2
+      SubnetIds: 
+        - !Ref MyPrivateSN2
+      SecurityGroupIds:
+        - !Ref MyInstanceSG2
+
+  MySSMMSGEndpoint2:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcId: !Ref MyVPC2
+      SubnetIds: 
+        - !Ref MyPrivateSN2
+      SecurityGroupIds:
+        - !Ref MyInstanceSG2
+
+  MyEC2MSGEndpoint2:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PrivateDnsEnabled: true
+      VpcEndpointType: Interface
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcId: !Ref MyVPC2
+      SubnetIds: 
+        - !Ref MyPrivateSN2
+      SecurityGroupIds:
+        - !Ref MyInstanceSG2
+
+  MyInstance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      IamInstanceProfile: !Ref MyInstanceProfile
+      Tags:
+        - Key: Name
+          Value: My-Instance-2
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          PrivateIpAddress: 10.1.0.10
+          DeviceIndex: 0
+          SubnetId: !Ref MyPrivateSN2
+          GroupSet:
+            - !Ref MyInstanceSG2
